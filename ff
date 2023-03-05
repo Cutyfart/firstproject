@@ -1,0 +1,75 @@
+import telebot
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, \
+    InlineKeyboardButton, InlineKeyboardMarkup
+
+bot = telebot.TeleBot('6156912612:AAEnIeHR_uriQbnDUCYocnwitKWNdZsVNOU')
+
+# стоимость за квадратный метр для каждого типа ремонта
+REPAIR_COSTS = {
+    'Стандарт': 9000,
+    'Бизнес': 10000,
+    'Дизайнерский': 12000
+}
+
+@bot.message_handler(commands=['start'])
+def start_handler(message):
+    bot.send_message(message.chat.id, 'Здравствуйте, это бот для расчета стоимости ремонта от ALLFOR. '
+                                      'Для начала работы выберите тип помещения.', reply_markup=get_rooms_keyboard())
+
+def get_rooms_keyboard():
+    rooms_keyboard = ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    rooms_keyboard.add(KeyboardButton('Квартира'), KeyboardButton('Дом/Таунхаус'))
+    return rooms_keyboard
+
+def get_repair_types_keyboard():
+    repair_types_keyboard = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    repair_types_keyboard.add(KeyboardButton('Стандарт'), KeyboardButton('Бизнес'), KeyboardButton('Дизайнерский'))
+    return repair_types_keyboard
+
+def get_phone_number_keyboard():
+    phone_number_keyboard = ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    phone_number_keyboard.add(KeyboardButton('Отправить номер телефона', request_contact=True))
+    return phone_number_keyboard
+
+@bot.message_handler(func=lambda message: message.text in ['Квартира', 'Дом/Таунхаус'])
+def handle_rooms(message):
+    bot.send_message(message.chat.id, 'Выберите тип ремонта, '
+                                      'от него будет зависеть конечная стоимость '
+                                      'ремонта:', reply_markup=get_repair_types_keyboard())
+    bot.register_next_step_handler(message, handle_repair_type)
+
+def handle_repair_type(message):
+    repair_type = message.text
+    if repair_type not in REPAIR_COSTS:
+        bot.send_message(message.chat.id, 'Пожалуйста, выберите один из предложенных типов ремонта.')
+        bot.register_next_step_handler(message, handle_repair_type)
+        return
+    bot.send_message(message.chat.id, 'Введите площадь помещения, например так: 50')
+    bot.register_next_step_handler(message, lambda m: handle_area(m, repair_type))
+
+
+def handle_area(message, repair_type):
+    try:
+        area = float(message.text)
+        cost_per_square_meter = REPAIR_COSTS[repair_type]
+        total_cost = area * cost_per_square_meter
+        formatted_total_cost = '{:,.0f}'.format(total_cost).replace(',', ' ')
+        bot.send_message(message.chat.id, f'Примерная стоимость вашего ремонта составит {formatted_total_cost} рублей, '
+                                          f'если мы вас заинтерисовали, просьба оставить свой номер '
+                                          f'телефона.', reply_markup=get_phone_number_keyboard())
+    except ValueError:
+        bot.send_message(message.chat.id, 'Пожалуйста, введите площадь в виде числа.')
+        bot.register_next_step_handler(message, lambda m: handle_area(m, repair_type))
+
+
+
+@bot.message_handler(content_types=['contact'])
+def handle_contact(message):
+    phone_number = message.contact.phone_number
+    bot.send_message(message.chat.id, f'Спасибо, мы свяжемся с вами в ближайшее '
+                                      f'время по номеру {phone_number}!', reply_markup=ReplyKeyboardRemove())
+
+bot.polling()
+
+
+
